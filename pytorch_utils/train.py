@@ -68,7 +68,7 @@ class Train:
         self.epoch_model = os.path.join(self.save_path, self.epoch_model)
         with mlflow.start_run():
             # 记录训练参数
-            mlflow.log_param('config', config)
+            mlflow.log_params(config)
             mlflow.log_param('net', str(net))
             mlflow.log_param('net_name', net_name)
             mlflow.log_param('transform', self.transform)
@@ -77,7 +77,7 @@ class Train:
             self.net = net.to(self.device)
             mlflow.log_param('device', self.device)
             if self.device == self.cuda:
-                mlflow.log_param('device', torch.cuda.get_device_name(0))
+                mlflow.log_param('device_name', torch.cuda.get_device_name(0))
 
             start = time.time()
             self.best_acc = 0
