@@ -40,6 +40,9 @@ class Train:
             raise Exception('模型路径不存在：'+save_path)
         self.save_path = save_path
 
+        # 初始化tune log
+        self.tune_log = None
+
     def log_transform(self, transform):
         """记录数据处理与增强参数
         :param transform: str: 数据处理与增强参数
@@ -51,7 +54,11 @@ class Train:
         self.trainloader = trainloader
         self.testloader = testloader
 
-    def run(self, net, config, optimizer, criterion=nn.CrossEntropyLoss()):
+    def set_tune_log(self, tune_log):
+        """超参指标记录函数"""
+        self.tune_log = tune_log
+
+    def run(self, epoch, net, config, optimizer, criterion=nn.CrossEntropyLoss()):
         """开始训练"""
         self.config = config
         self.criterion = criterion
@@ -69,6 +76,7 @@ class Train:
         with mlflow.start_run():
             # 记录训练参数
             mlflow.log_params(config)
+            mlflow.log_param('epoch', epoch)
             mlflow.log_param('net', str(net))
             mlflow.log_param('net_name', net_name)
             mlflow.log_param('transform', self.transform)
@@ -81,8 +89,8 @@ class Train:
 
             start = time.time()
             self.best_acc = 0
-            for epoch in range(config['epoch']):
-                self.run_epoch(epoch)
+            for epoch_i in range(epoch):
+                self.run_epoch(epoch_i)
 
             mlflow.log_param('run_time', time.time()-start)
 
@@ -119,6 +127,8 @@ class Train:
 
             # 保存模型
             self.save_model(epoch, test_acc)
+            if self.tune_log is not None:
+                self.tune_log(test_acc)
 
         return
 
