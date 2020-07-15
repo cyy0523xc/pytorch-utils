@@ -41,7 +41,7 @@ class Train:
         self.save_path = save_path
 
         # 初始化tune log
-        self.tune_log = None
+        self.report = None
 
     def log_transform(self, transform):
         """记录数据处理与增强参数
@@ -54,11 +54,12 @@ class Train:
         self.trainloader = trainloader
         self.testloader = testloader
 
-    def set_tune_log(self, tune_log):
+    def set_report_func(self, report):
         """超参指标记录函数"""
-        self.tune_log = tune_log
+        self.report = report
 
-    def run(self, epoch, net, config, optimizer, criterion=nn.CrossEntropyLoss()):
+    def run(self, epoch, net, config, optimizer,
+            criterion=nn.CrossEntropyLoss()):
         """开始训练"""
         self.config = config
         self.criterion = criterion
@@ -123,12 +124,13 @@ class Train:
             mlflow.log_metric('Train_Loss', train_loss, step=epoch)
             mlflow.log_metric('Test_Loss', test_loss, step=epoch)
             mlflow.log_metric('Test_ACC', test_acc, step=epoch)
-            print('epoch %d:   Train Loss = %.2f, Test Loss: %.2f, Test Acc = %.2f%%,  Time = %.1fs,  Test Time: %.1fs' % (epoch + 1, train_loss, test_loss, 100*test_acc, time.time()-start, time.time()-test_time))
+            print('epoch %d:   Train Loss = %.2f, Test Loss: %.2f, Test Acc = %.2f%%,  Time = %.1fs,  Test Time: %.1fs' % (
+                epoch + 1, train_loss, test_loss, 100*test_acc, time.time()-start, time.time()-test_time))
 
             # 保存模型
             self.save_model(epoch, test_acc)
-            if self.tune_log is not None:
-                self.tune_log(test_acc)
+            if self.report is not None:
+                self.report(test_acc)
 
         return
 
@@ -143,13 +145,14 @@ class Train:
         if is_first:
             filesize = os.path.getsize(self.last_model)/1024/1024
             mlflow.log_metric('filesize', filesize)       # 记录模型文件大小
-            
+
         # 保存模型
         if acc > self.best_acc:       # 保存指标最好的模型
             torch.save(self.net.state_dict(), self.best_model)
             self.best_acc = acc
-            print('当前最优ACC: %.2f%%, EPOCH: %05d' % (100*self.best_acc, epoch+1))
-        
+            print('当前最优ACC: %.2f%%, EPOCH: %05d' %
+                  (100*self.best_acc, epoch+1))
+
         # 按epoch保存模型
         torch.save(self.net.state_dict(), self.epoch_model % epoch)
 
