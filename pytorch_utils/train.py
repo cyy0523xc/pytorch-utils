@@ -115,7 +115,7 @@ class Train:
             mlflow.log_metric('Train_Loss', train_loss, step=epoch)
             mlflow.log_metric('Test_Loss', test_loss, step=epoch)
             mlflow.log_metric('Test_ACC', test_acc, step=epoch)
-            print('epoch %d:   Train Loss = %.2f%%, Test Loss: %.2f, Test Acc = %.2f%%,  Time = %.1fs,  Test Time: %.1fs' % (epoch + 1, 100 * train_loss, 100*test_loss, 100*test_acc, time.time()-start, time.time()-test_time))
+            print('epoch %d:   Train Loss = %.2f, Test Loss: %.2f, Test Acc = %.2f%%,  Time = %.1fs,  Test Time: %.1fs' % (epoch + 1, train_loss, test_loss, 100*test_acc, time.time()-start, time.time()-test_time))
 
             # 保存模型
             self.save_model(epoch, test_acc)
