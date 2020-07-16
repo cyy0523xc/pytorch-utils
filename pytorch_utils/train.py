@@ -9,6 +9,7 @@ import time
 import mlflow
 import torch
 from torch import nn
+from torchcontrib.optim import SWA
 
 
 class Train:
@@ -40,8 +41,9 @@ class Train:
             raise Exception('模型路径不存在：'+save_path)
         self.save_path = save_path
 
-        # 初始化tune log
-        self.report = None
+        # 初始化指标记录函数
+        self.report_train = None
+        self.report_test = None
 
     def log_transform(self, transform):
         """记录数据处理与增强参数
@@ -54,18 +56,30 @@ class Train:
         self.trainloader = trainloader
         self.testloader = testloader
 
-    def set_report_func(self, report):
-        """超参指标记录函数"""
-        self.report = report
+    def set_report_train(self, report_func):
+        """记录训练指标"""
+        self.report_train = report_func
+
+    def set_report_test(self, report_func):
+        """记录测试指标"""
+        self.report_test = report_func
 
     def run(self, epoch, net, config, optimizer,
-            criterion=nn.CrossEntropyLoss()):
+            criterion=nn.CrossEntropyLoss(), use_swa=True):
         """开始训练"""
         self.config = config
         self.criterion = criterion
         self.optimizer = optimizer
         net_name = net.__class__.__name__
         optim_name = optimizer.__class__.__name__
+        self.use_swa = use_swa
+        if use_swa:
+            self.optim_base = optimizer
+            optimizer = SWA(optimizer)
+            self.optimizer = optimizer
+        else:
+            self.optim_base = None
+
         # 计算存储路
         file_pre = net_name+'_%s_lr%f' % (optim_name, config['lr'])
         self.last_model = file_pre + '_last.pth'
@@ -83,6 +97,9 @@ class Train:
             mlflow.log_param('transform', self.transform)
             mlflow.log_param('criterion', str(criterion))
             mlflow.log_param('optimizer', str(optimizer))
+            if self.optim_base is not None:
+                mlflow.log_param('optim_base', str(self.optim_base))
+
             self.net = net.to(self.device)
             mlflow.log_param('device', self.device)
             if self.device == self.cuda:
@@ -91,21 +108,21 @@ class Train:
             start = time.time()
             self.best_acc = 0
             for epoch_i in range(epoch):
-                self.run_epoch(epoch_i)
+                self.train_epoch(epoch_i)
 
             mlflow.log_param('run_time', time.time()-start)
 
         return
 
-    def run_epoch(self, epoch):
+    def train_epoch(self, epoch):
         """运行一个epoch"""
         sum_loss = 0.0
-        all_loss, all_acc = [], []
+        all_loss = []
         start = time.time()
         for i, data in enumerate(self.trainloader):
             inputs, labels = data
             inputs, labels = inputs.to(self.device), labels.to(self.device)
-            loss = self.run_batch(inputs, labels)
+            loss = self.train_batch(inputs, labels)
             sum_loss += loss
             # 每训练100个batch打印一次平均loss
             if i % 100 == 99:
@@ -114,13 +131,17 @@ class Train:
                 mlflow.log_metric('loss', avg_loss)
                 all_loss.append(avg_loss)
                 sum_loss = 0.0
+            if self.use_swa and i % 10 == 9:
+                self.optimizer.update_swa()
+
+        if self.use_swa:
+            self.optimizer.swap_swa_sgd()
 
         # 每跑完一次epoch测试一下准确率
         with torch.no_grad():
             test_time = time.time()
             train_loss = sum(all_loss)/len(all_loss)
             test_loss, test_acc = self.cal_metric(self.testloader)
-            all_acc.append(test_acc)
             mlflow.log_metric('Train_Loss', train_loss, step=epoch)
             mlflow.log_metric('Test_Loss', test_loss, step=epoch)
             mlflow.log_metric('Test_ACC', test_acc, step=epoch)
@@ -129,8 +150,10 @@ class Train:
 
             # 保存模型
             self.save_model(epoch, test_acc)
-            if self.report is not None:
-                self.report(test_acc)
+            if self.report_train is not None:
+                self.report_train(train_loss)
+            if self.report_test is not None:
+                self.report_test(test_loss, test_acc)
 
         return
 
@@ -156,7 +179,7 @@ class Train:
         # 按epoch保存模型
         torch.save(self.net.state_dict(), self.epoch_model % epoch)
 
-    def run_batch(self, inputs, labels):
+    def train_batch(self, inputs, labels):
         """运行一个批次"""
         # 梯度清零
         self.optimizer.zero_grad()
