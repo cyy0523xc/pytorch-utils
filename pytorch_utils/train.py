@@ -66,7 +66,14 @@ class Train:
 
     def run(self, epoch, net, config, optimizer,
             criterion=nn.CrossEntropyLoss(), use_swa=True):
-        """开始训练"""
+        """开始训练
+        SWA: https://www.afenxi.com/66262.html
+        SWA在计算机视觉、半监督学习、强化学习、不确定性表示、标定、贝叶斯模型平均和低精度训练等方面都有较强的性能。
+        使用浮点(16位)SGD在CIFAR-100上训练的ResNet-164可以达到22.2%的错误，而8位SGD可以达到24.0%的错误。相比之下，经过8位训练的SWALP的错误率为21.8%。
+        低精度SGD训练（使用变化的学习率策略），SWALP
+        SWAG: https://github.com/wjmaddox/swa_gaussian
+        SWAG在计算机视觉任务中的不确定性量化、异常检测、标定和迁移学习等方面的性能与MC dropout、KFAC拉普拉斯、温度缩放等常用方法相当或更好。
+        """
         self.config = config
         self.criterion = criterion
         self.optimizer = optimizer
